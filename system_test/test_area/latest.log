@@ -1,0 +1,8 @@
+{syslog_info,{2020,3,19},
+             {23,56,41},
+             na,na,pod_master@asus,master_service,334,error,
+             [{badrpc,timeout}]}.
+{syslog_info,{2020,3,19},
+             {23,56,31},
+             na,na,pod_master@asus,master_service,142,info,
+             ["lib_master started"]}.
