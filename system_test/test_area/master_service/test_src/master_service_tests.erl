@@ -16,7 +16,7 @@
 %% --------------------------------------------------------------------
 -include_lib("eunit/include/eunit.hrl").
 -include("common_macros.hrl").
--include("master_service_tests.hrl").
+
 %% --------------------------------------------------------------------
 
 %% External exports
@@ -39,11 +39,14 @@ cases_test()->
     stop_test_system:start(),
     ?debugMsg("Start clean_start"),
     clean_start(),
-    ?debugMsg("Start eunit_start"),
-    eunit_start(),
+    
+    ?debugMsg("Start ets test"),
+    ets_test:start(),
+    
     ?debugMsg("Start start_test_system:start"),
     start_test_system:start(),
-    ?debugMsg("Start orchistrate_test:start"),
+ 
+   ?debugMsg("Start orchistrate_test:start"),
     orchistrate_test:start(),
     ?debugMsg("Start stop_test_system:start"),
     stop_test_system:start(),
@@ -60,7 +63,7 @@ cases_test()->
      % cleanup and stop eunit 
      stop_computer_pods(),
      clean_stop(),
-     eunit_stop().
+    ok.
 
 
 %% --------------------------------------------------------------------
@@ -72,18 +75,14 @@ start()->
     spawn(fun()->eunit:test({timeout,2*60,master_service}) end).
 
 clean_start()->
+    create_configs:start(),
     os:cmd("rm -rf  latest.log"),
     {ok,NodesInfo}=file:consult("node.config"),
     L1=lists:keydelete(node(),2, NodesInfo),
     [rpc:call(Vm,init,stop,[])||{_,Vm,_,_}<-L1],
     [pod:delete(VmName)||{VmName,_,_,_}<-L1],
     ok.
-eunit_start()->
-    ok.
 
-clean_stop()->
-   
-    ok.
 
 stop_computer_pods()->
     {ok,NodesInfo}=file:consult("node.config"),
@@ -92,13 +91,17 @@ stop_computer_pods()->
     [pod:delete(VmName)||{VmName,_,_,_}<-L1],
     ok.
 
-eunit_stop()->
-    [
-     stop_service(lib_service),
-     stop_service(log_service),
-     stop_service(dns_service),
-     timer:sleep(1000),
-     init:stop()].
+clean_stop()->
+    stop_service(lib_service),
+    stop_service(log_service),
+    stop_service(dns_service),
+   
+    os:cmd("rm -rf pod_master lib_service log_service logfiles dns_service include"),
+    timer:sleep(1000),
+    init:stop(),
+    ok.
+
+
 
 %% --------------------------------------------------------------------
 %% Function:support functions

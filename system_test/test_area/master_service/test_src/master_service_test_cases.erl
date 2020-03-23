@@ -11,7 +11,7 @@
 %% --------------------------------------------------------------------
 -include_lib("eunit/include/eunit.hrl").
 -include("common_macros.hrl").
--include("master_service_tests.hrl").
+
 %% --------------------------------------------------------------------
 -compile(export_all).
 

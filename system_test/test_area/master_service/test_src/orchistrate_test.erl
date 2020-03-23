@@ -29,8 +29,8 @@ start()->
     ?assertMatch([{"master_service","localhost",40000},
 		  {"log_service","localhost",40000},
 		  {"dns_service","localhost",40000}],dns_service:all()),
-    master_service:campaign(),
-    timer:sleep(15*1000),
+    orchistrater:campaign(),
+    timer:sleep(20*1000),
     ?assertMatch(6,lists:flatlength(dns_service:all())),
 
     ?assertMatch([{"localhost",_},
@@ -44,12 +44,12 @@ start()->
     ?assertEqual(42.0,tcp_client:call({IpAddrDivi,PortDivi},{divi_service,divi,[420,10]})),
     
     % remove divi_service
-    master_service:stop_unload("divi_service",IpAddrDivi,PortDivi),
+    service_handler:stop_unload("divi_service",IpAddrDivi,PortDivi),
     ?assertMatch({badrpc,_},tcp_client:call({IpAddrDivi,PortDivi},{divi_service,divi,[420,10]})),
     ?assertEqual([],tcp_client:call(?DNS_ADDRESS,{dns_service,get,["divi_service"]})),
 
     %% RESTART divi 
-    master_service:campaign(),
+    orchistrater:campaign(),
     timer:sleep(10*1000),
   %% do something
     [{IpAddrDivi2,PortDivi2}|_]=tcp_client:call(?DNS_ADDRESS,{dns_service,get,["divi_service"]}),
@@ -65,7 +65,7 @@ start()->
     %% 2). Remove missing services from dns . Registered Service Not memeber of Desired  
     %% 3). Try to start missing services based on available nodes
 
-    master_service:campaign(),
+    orchistrater:campaign(),
    %  ?assertEqual(glurk,tcp_client:call(?DNS_ADDRESS,{dns_service,get,["divi_service"]})),
     timer:sleep(5*1000),
     [{IpAddrDivi3,PortDivi3}|_]=tcp_client:call(?DNS_ADDRESS,{dns_service,get,["divi_service"]}),
@@ -108,7 +108,7 @@ do_call([{IpAddr,Port}|_],ServiceId,M,F,A,Result,N)->
 load_start([],StartResult)->
     StartResult;
 load_start([{ServiceId,IpAddrPod,PortPod}|T],Acc)->
-    NewAcc=[master_service:load_start(ServiceId,IpAddrPod,PortPod)|Acc],
+    NewAcc=[service_handler:load_start(ServiceId,IpAddrPod,PortPod)|Acc],
     load_start(T,NewAcc).
 
 
@@ -120,7 +120,7 @@ load_start([{ServiceId,IpAddrPod,PortPod}|T],Acc)->
 %% -------------------------------------------------------------------
 find_obsolite()->
   %  ?assertMatch([],tcp_client:call({"localhost",45000},{list_to_atom("glurk_service"),ping,[]})),
-    DS=master_service:desired_services(),
+    DS=lib_ets:all(desired_services),
     ?assertMatch([{"dns_service","localhost",40000},
 		  {"master_service","localhost",40000}],lib_master:check_obsolite_services(DS)),
     DS2=[{"divi_service","localhost",40000}|DS],
@@ -136,7 +136,7 @@ find_obsolite()->
 %% Returns: non
 %% -------------------------------------------------------------------
 available()->
-    NodesInfo=master_service:nodes(),
+    NodesInfo=lib_ets:all(nodes),
     ?assertMatch([{"pod_master",pod_master@asus,"localhost",40000,parallell}],
 		 lib_master:check_available_nodes(NodesInfo)),
   
@@ -150,7 +150,7 @@ available()->
 %% -------------------------------------------------------------------
 find_missing()->
   %  ?assertMatch([],tcp_client:call({"localhost",45000},{list_to_atom("glurk_service"),ping,[]})),
-    NodesInfo=master_service:nodes(),
+    NodesInfo=lib_ets:all(nodes),
     ?assertMatch([{"pod_landet_1",pod_landet_1@asus,"localhost",50100,parallell},
 		  {"pod_lgh_1",pod_lgh_1@asus,"localhost",40100,parallell},
 		  {"pod_lgh_2",pod_lgh_2@asus,"localhost",40200,parallell}],

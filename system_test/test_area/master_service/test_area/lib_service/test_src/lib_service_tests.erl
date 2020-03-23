@@ -31,10 +31,9 @@ cases_test()->
     [clean_start(),
      eunit_start(),
      % Add funtional test cases 
-     lib_service_test_cases:misc_lib(),
-     lib_service_test_cases:pod_container_cases(),
-     lib_service_test_cases:tcp_service(),
-     lib_service_test_cases:unconsult(),
+     misc_test:start(),
+ %    pod_test:start(),
+     tcp_test:start(),
      % cleanup and stop eunit 
      clean_stop(),
      eunit_stop()].
@@ -46,7 +45,7 @@ cases_test()->
 %% Returns: non
 %% --------------------------------------------------------------------
 start()->
-    spawn(fun()->eunit:test({timeout,30,lib_service}) end).
+    spawn(fun()->eunit:test({timeout,60,lib_service}) end).
 
 
 

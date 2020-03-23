@@ -36,10 +36,11 @@
 %% Returns: non
 %% --------------------------------------------------------------------
 start()->
+    start_needed_services(),
     start_nodes(),
     ok=application:start(master_service),
     dns_service:add("master_service","localhost",40000),
-    check_nodes(),
+%    check_nodes(),
     ok.
 
 
@@ -51,20 +52,15 @@ start()->
 %% Returns: non
 %% -------------------------------------------------------------------
 check_nodes()->
-    NodesInfo=master_service:nodes(),
+    NodesInfo=lib_ets:all(nodes),
+    ?assertMatch([], NodesInfo),
     ?assertMatch([],
 		 lib_master:check_missing_nodes(NodesInfo)),
     ok.
     
 
 
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-start_nodes()->
+start_needed_services()->
     %% Start lib_service and tcp_server for pod_master 
     ok=application:start(dns_service),    
     dns_service:add("dns_service","localhost",40000),
@@ -75,6 +71,14 @@ start_nodes()->
     lib_service:start_tcp_server("localhost",40000,parallell), 
     D=date(),
     ?assertEqual(D,tcp_client:call({"localhost",40000},{erlang,date,[]})),
+    ok.
+%% --------------------------------------------------------------------
+%% Function:start/0 
+%% Description: Initiate the eunit tests, set upp needed processes etc
+%% Returns: non
+%% -------------------------------------------------------------------
+start_nodes()->
+
     %% Create worker pods 
     {ok,NodeList}=file:consult(?NODE_CONFIG),
     WorkerList=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodeList,

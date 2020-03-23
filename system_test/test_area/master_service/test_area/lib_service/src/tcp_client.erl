@@ -25,7 +25,7 @@
 %-compile(export_all).
 
 -export([connect/2,connect/3,disconnect/1,
-	 call/2,call/6,call/7,cast/2,
+	 call/2,call/3,call/6,call/7,cast/2,
 	 get_msg/2
 	]).
 
@@ -74,18 +74,13 @@ connect(IpAddr,Port)->
     Result.
     
 connect(IpAddr,Port,Timeout)->
-    Client=self(),
-    Pid=spawn(fun()->connect_timeout(IpAddr,Port,Client) end),
-    Result=receive
-	       {Pid,Reply}->
-		   Reply
-	   after Timeout ->
-		   {error,[timeout,connect,IpAddr,Port,?MODULE,?LINE]}
+    Result=case gen_tcp:connect(IpAddr,Port,?CLIENT_SETUP,Timeout) of
+	       {ok,Socket}->
+		   {ok,Socket};
+	       {error,Err} ->
+		   {error,[Err,IpAddr,Port,?MODULE,?LINE]}
 	   end,
     Result.
-		
-connect_timeout(IpAddr,Port,Client)->
-    Client!{self(),gen_tcp:connect(IpAddr,Port,?CLIENT_SETUP)}.
 
 disconnect(Socket)->
     gen_tcp:close(Socket).
@@ -121,6 +116,16 @@ get_msg(Socket,Timeout)->
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
+call({IpAddr,Port},{M,F,A},TimeOut)->
+    case connect(IpAddr,Port,TimeOut) of
+	{error,[timeout,connect,IpAddr,Port,?MODULE,?LINE]}->
+	    {error,[timeout,connect,IpAddr,Port,?MODULE,?LINE]};
+	 {ok,Socket}->
+	    cast(Socket,{M,F,A}),
+	    get_msg(Socket,TimeOut);
+	X ->
+	    X
+    end.
 call({IpAddr,Port},{M,F,A})->
     Msg=case {M,F,A} of
 	    {os,cmd,A}->
@@ -140,7 +145,7 @@ send(IpAddr,Port,Msg)->
 			       {?KEY_MSG,R}->
 				   R;
 			       Err->
-				   {error,[Err,?MODULE,?LINE]}
+				   {error,[Err,IpAddr,Port,Msg,?MODULE,?LINE]}
 			   end;
 		{tcp_closed, Socket}->
 		    Result={error,tcp_closed}

@@ -18,26 +18,17 @@
 %% Key Data structures
 %% 
 %% --------------------------------------------------------------------
--record(state,{nodes,apps,catalog,desired_services,dns_address,tcp_servers}).
+-record(state,{dns_address,tcp_servers}).
 
 
 %% --------------------------------------------------------------------
 %% Definitions 
 %% --------------------------------------------------------------------
--define(MASTER_HEARTBEAT,20*1000).
+-define(MASTER_HEARTBEAT,40*1000).
 
 
 -export([desired_services/0,catalog/0,apps/0,
-	 nodes/0,
-	 load_start/3,stop_unload/3,
-	 update_configs/0,
-	 campaign/0
-	]).
-
--export([update_node_info/4,read_node_info/1,
-	 node_availability/1,
-	 update_app_info/5,read_app_info/1,delete_app_info/1,
-	 app_availability/1
+	 nodes/0
 	]).
 
 -export([start/0,
@@ -69,52 +60,15 @@ ping()->
 
 %%-----------------------------------------------------------------------
 
-
-load_start(ServiceId,IpAddrPod,PortPod)->
-    gen_server:call(?MODULE, {load_start,ServiceId,IpAddrPod,PortPod},infinity).
-stop_unload(ServiceId,IpAddrPod,PortPod)->
-    gen_server:call(?MODULE, {stop_unload,ServiceId,IpAddrPod,PortPod},infinity).
-
-
-
-
-update_configs()->
-    gen_server:call(?MODULE, {update_configs},infinity).
-
 catalog()->
-    gen_server:call(?MODULE, {catalog},infinity).
+    gen_server:call(?MODULE, {ets_all,catalog},infinity).
 nodes()->
-    gen_server:call(?MODULE, {nodes},infinity).
+    gen_server:call(?MODULE, {ets_all,nodes},infinity).
 apps()->
-    gen_server:call(?MODULE, {apps},infinity).
+    gen_server:call(?MODULE, {ets_all,apps},infinity).
 desired_services()->
-    gen_server:call(?MODULE, {desired_services},infinity).
+    gen_server:call(?MODULE, {ets_all,desired_services},infinity).
 
-%%-----------------------   Tabort ------------------------------------------------
-app_availability(ServiceId)->
-    gen_server:call(?MODULE, {app_availability,ServiceId},infinity).
-
-update_app_info(ServiceId,Num,Nodes,Source,Status)->
-    gen_server:call(?MODULE, {update_app_info,ServiceId,Num,Nodes,Source,Status},infinity).
-
-read_app_info(ServiceId)->
-    gen_server:call(?MODULE, {read_app_info,ServiceId},infinity).
-
-delete_app_info(ServiceId)->
-    gen_server:call(?MODULE, {delete_app_info,ServiceId},infinity).
-
-node_availability(NodeId)->
-    gen_server:call(?MODULE, {node_availability,NodeId},infinity).
-
-update_node_info(IpAddr,Port,Mode,Status)->
-    gen_server:call(?MODULE, {update_node_info,IpAddr,Port,Mode,Status},infinity).
-
-read_node_info(NodeId)->
-    gen_server:call(?MODULE, {read_node_info,NodeId},infinity).
-
-%%-----------------------------------------------------------------------
-campaign()->
-    gen_server:cast(?MODULE, {campaign}).
 
 heart_beat(Interval)->
     gen_server:cast(?MODULE, {heart_beat,Interval}).
@@ -134,15 +88,11 @@ heart_beat(Interval)->
 %
 %% --------------------------------------------------------------------
 init([]) ->
-    {ok,NodesInfo}=file:consult(?NODE_CONFIG),
-    {ok,AppInfo}=file:consult(?APP_SPEC),
-    {ok,CatalogInfo}=file:consult(?CATALOG_INFO),
-    DesiredServices=lib_master:create_service_list(AppInfo,NodesInfo),
+    ok=lib_ets:init(),
+    spawn(fun()->lib_master:update_configs() end),
     spawn(fun()->heart_beat(?MASTER_HEARTBEAT) end),
-    lib_service:log_event(?MODULE,?LINE,info,["lib_master started"]),
-    {ok, #state{nodes=NodesInfo,apps=AppInfo,catalog=CatalogInfo,
-		desired_services=DesiredServices,
-		dns_address=[],tcp_servers=[]}}.   
+    lib_service:log_event(?MODULE,?LINE,info,["master_service started"]),
+    {ok, #state{dns_address=[],tcp_servers=[]}}.   
     
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -155,110 +105,8 @@ init([]) ->
 %%          {stop, Reason, State}            (aterminate/2 is called)
 %% --------------------------------------------------------------------
 
-
-handle_call({load_start,ServiceId,IpAddrPod,PortPod}, _From, State) ->
-   % {"pod_master",'pod_master@asus',"localhost",40000,parallell}
-    L=[{NodeId,Node,IpAddrNode,PortNode}
-       ||{NodeId,Node,IpAddrNode,PortNode,_Mode}<-State#state.nodes,
-	 {IpAddrNode,PortNode}=:={IpAddrPod,PortPod}],
-    
-    case L of
-	[]->
-	    Reply={error,[eexists,IpAddrPod,PortPod,?MODULE,?LINE]};
-	L->
-	    [{NodeId,_Node,IpAddrNode,PortNode}]=L,
-						%  {{service,"adder_service"},{dir,"/home/pi/erlang/d/source"}}
-	    CatalogInfo=lists:keyfind({service,ServiceId},1,State#state.catalog),
-  
-%    Reply=[ServiceId,{IpAddrNode,PortNode},[Node,NodeId,[CatalogInfo]]],
-	     Reply={tcp_client:call({IpAddrNode,PortNode},
-				    {container,create,[NodeId,[CatalogInfo]]}),
-		    ServiceId,IpAddrPod,PortPod},
-	    case Reply of
-		{ok,ServiceId,IpAddrPod,PortPod}->
-		    lib_service:log_event(?MODULE,?LINE,info,["ok Started ",ServiceId,IpAddrPod,PortPod]),
-		    ok=tcp_client:call(?DNS_ADDRESS,{dns_service,add,[ServiceId,IpAddrNode,PortNode]});
-		Err->
-		    lib_service:log_event(?MODULE,?LINE,info,["Error Started Service ",ServiceId,IpAddrPod,PortPod,Err])
-	    end
-    end,
-    {reply, Reply,State};
-
-
-handle_call({stop_unload,ServiceId,IpAddrPod,PortPod}, _From, State) ->
-    [L]=[{NodeId,Node,IpAddrNode,PortNode}
-	 ||{NodeId,Node,IpAddrNode,PortNode,_Mode}<-State#state.nodes,
-	   {IpAddrNode,PortNode}=:={IpAddrPod,PortPod}],
-    {NodeId,_Node,IpAddrNode,PortNode}=L,
-    [ok]=tcp_client:call({IpAddrNode,PortNode},{container,delete,[NodeId,[ServiceId]]}),
-    ok=tcp_client:call(?DNS_ADDRESS,{dns_service,delete,[ServiceId,IpAddrNode,PortNode]}),
-    lib_service:log_event(?MODULE,?LINE,info,["ok Stopped Service ",ServiceId,IpAddrPod,PortPod]),
-    Reply=ok,
-    {reply, Reply,State};
-
-
-handle_call({update_configs}, _From, State) ->
-    NodesInfo=lib_master:update_nodes(),
-    %% Remove services on missing nodes from dns
-    %% 
-    {ok,AppInfo}=file:consult(?APP_SPEC),
-    {ok,CatalogInfo}=file:consult(?CATALOG_INFO),
-    DesiredServices=lib_master:create_service_list(AppInfo,NodesInfo),
-    NewState=State#state{nodes=NodesInfo,apps=AppInfo,
-			 catalog=CatalogInfo,
-			 desired_services=DesiredServices},
-    Reply=ok,			 
-
-    {reply, Reply,NewState};
-
-handle_call({apps}, _From, State) ->
-    Reply=State#state.apps,
-    {reply, Reply,State};
-
-handle_call({nodes}, _From, State) ->
-    Reply=State#state.nodes,
-    {reply, Reply,State};
-
-handle_call({catalog}, _From, State) ->
-    Reply=State#state.catalog,
-    {reply, Reply,State};
-
-handle_call({desired_services}, _From, State) ->
-    Reply=State#state.desired_services,
-    {reply, Reply,State};
-
-
-%%%%%%%=========================================================================
-
-
-handle_call({app_availability,ServiceId}, _From, State) ->
-    Reply=rpc:call(node(),lib_app,app_availability,[ServiceId]),
-    {reply, Reply,State};
-
-handle_call({update_app_info,ServiceId,Num,Nodes,Source,Status}, _From, State) ->
-    Reply=rpc:call(node(),lib_app,update_app_info,[ServiceId,Num,Nodes,Source,Status]),
-    {reply, Reply,State};
-
-handle_call({read_app_info,ServiceId}, _From, State) ->
-    Reply=rpc:call(node(),lib_app,read_app_info,[ServiceId]),
-    {reply, Reply,State};
-
-
-handle_call({delete_app_info,ServiceId}, _From, State) ->
-    Reply=rpc:call(node(),lib_app,delete_app_info,[ServiceId]),
-    {reply, Reply,State};
-
-handle_call({node_availability,NodeId}, _From, State) ->
-    Reply=rpc:call(node(),lib_master,node_availability,[NodeId]),
-    {reply, Reply,State};
-
-handle_call({update_node_info,IpAddr,Port,Mode,Status}, _From, State) ->
-    Reply=rpc:call(node(),lib_master,update_node_info,[IpAddr,Port,Mode,Status]),
-    {reply, Reply,State};
-
-
-handle_call({read_node_info,NodeId}, _From, State) ->
-    Reply=rpc:call(node(),lib_master,read_node_info,[NodeId]),
+handle_call({ets_all,Type}, _From, State) ->
+    Reply=rpc:call(node(),lib_ets,all,[Type]),
     {reply, Reply,State};
 
 handle_call({ping},_From,State) ->
@@ -279,9 +127,6 @@ handle_call(Request, From, State) ->
 %%          {noreply, State, Timeout} |
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
-handle_cast({campaign}, State) ->
-    spawn(fun()->lib_master:campaign() end),    
-    {noreply, State};
 
 handle_cast({heart_beat,Interval}, State) ->
     spawn(fun()->h_beat(Interval) end),    
@@ -329,9 +174,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% Returns: non
 %% --------------------------------------------------------------------
 h_beat(Interval)->
-    case rpc:call(node(),lib_master,campaign,[],10000) of
+    case rpc:call(node(),orchistrater,campaign,[],60*1000) of
 	{badrpc,Err}->
-	    lib_service:log_event(?MODULE,?LINE,error,[{badrpc,Err}]);
+	    lib_service:log_event(?MODULE,?LINE,orchistrater,campaign,error,[{badrpc,Err}]);
 	_->
 	    ok
     end,

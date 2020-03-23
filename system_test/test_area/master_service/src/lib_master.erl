@@ -53,28 +53,26 @@
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-campaign()->
-     %% campaign
-    %% 1). Update configs - ensure that only availble nodes are part of the orchistration
-    %% 2). Remove missing services from dns . Registered Service Not memeber of Desired  
-    %% 3). Try to start missing services based on available nodes
-    %%
-    %% Will affect State !  
 
-    %% 1).
-    master_service:update_configs(),
-    
-    %% 2).
-    DesiredServices=master_service:desired_services(),
-    RegisteredServices=tcp_client:call(?DNS_ADDRESS,{dns_service,all,[]}),
-    RemoveDns=[{ServiceId,IpAddr,Port}||{ServiceId,IpAddr,Port,_,_}<-RegisteredServices,
-	      false==lists:member({ServiceId,IpAddr,Port},DesiredServices)],
-    [tcp_client:call(?DNS_ADDRESS,{dns_service,delete,[ServiceId,IpAddr,Port]})
-     ||{ServiceId,IpAddr,Port}<-RemoveDns],
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+update_configs()->
+    io:format("~p~n",[{?MODULE,?LINE,update_configs}]),
+    {ok,AppInfo}=file:consult(?APP_SPEC),
+    ok=lib_ets:add_apps(AppInfo),
 
-    %% 3).
-    start_missing(),
-    ok.
+    {ok,CatalogInfo}=file:consult(?CATALOG_INFO),
+    ok=lib_ets:add_catalog(CatalogInfo),
+
+    {ok,NodesInfo}=file:consult(?NODE_CONFIG),
+    AvailableNodesInfo=check_available_nodes(NodesInfo),
+    ok=lib_ets:add_nodes(AvailableNodesInfo),
+    DesiredServices=lib_master:create_service_list(AppInfo,NodesInfo),
+    ok=lib_ets:add_desired(DesiredServices),
+    ok.			 
 
 
 %% --------------------------------------------------------------------
@@ -82,69 +80,80 @@ campaign()->
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-
-
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-
 start_missing()->
-    NodesInfo=lib_master:update_nodes(),
-     {ok,AppInfo}=file:consult(?APP_SPEC),
+    AppInfo=lib_ets:all(apps),
+    NodesInfo=lib_ets:all(nodes),
     DS=lib_master:create_service_list(AppInfo,NodesInfo),
     case lib_master:check_missing_services(DS) of
 	[]->
 	    [];
 	Missing->
+	    io:format("~p~n",[{?MODULE,?LINE,missing ,Missing}]),
+	    lib_service:log_event(?MODULE,?LINE,info,["Missing services",Missing]),
 	    load_start(Missing,[])
     end. 
+
+
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
 
 
 load_start([],StartResult)->
     StartResult;
 load_start([{ServiceId,IpAddrPod,PortPod}|T],Acc)->
-    NewAcc=[master_service:load_start(ServiceId,IpAddrPod,PortPod)|Acc],
+    NewAcc=[service_handler:load_start(ServiceId,IpAddrPod,PortPod)|Acc],
+    timer:sleep(200),
     load_start(T,NewAcc).
 
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-update_nodes()->
-    {ok,NodesInfo}=file:consult(?NODE_CONFIG),
-    check_available_nodes(NodesInfo).
 
 %% --------------------------------------------------------------------
 %% Function: 
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-
-
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-
-
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-
+remove_obsolite()->
+    io:format("~p~n",[{?MODULE,?LINE,remove_obsolite}]),
+    DesiredServices=lib_ets:all(desired_services),
+    case check_obsolite_services(DesiredServices) of
+	[]->
+	    ok;
+	Obsolite ->
+	    lib_service:log_event(?MODULE,?LINE,info,["Obsolite services ",Obsolite]),
+	    remove(Obsolite,[])	    
+    end.
+remove([],Acc)->
+    Acc;
+remove([{ServiceId,IpAddr,Port}|T],Acc)->
+    Nodes=lib_ets:all(nodes),
+    R=case [NodeId||{NodeId,_,Ip1,P1,_}<-Nodes,
+	   {Ip1,P1}=:={IpAddr,Port}] of
+	[]->
+	    {error,[eexist,IpAddr,Port, ?MODULE,?LINE]};
+	[NodeId]->
+	    case tcp_client:call({IpAddr,Port},{container,delete,[NodeId,[ServiceId]]},?CLIENT_TIMEOUT) of
+		{error,Err}->
+		    lib_service:log_event(?MODULE,?LINE,error,[Err]),
+		    {error,Err};
+		[ok] ->
+		    tcp_client:call(?DNS_ADDRESS,{dns_service,delete,[ServiceId,IpAddr,Port]},?CLIENT_TIMEOUT),
+		    ok
+	    end
+      end,
+    remove(T,[R|Acc]).
+    
+    
 %% --------------------------------------------------------------------
 %% Function: 
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
 check_available_nodes(NodesInfo)->
-   % {ok,NodesInfo}=file:consult(?NODE_CONFIG),
-    PingR=[{tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]}),NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo],
+   % {ok,NodesInfo}=file:consult(?NODE_CONFIG),    
+    PingR=[{tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]},?CLIENT_TIMEOUT),NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo],
     ActiveNodes=[{NodeId,Node,IpAddr,Port,Mode}||{pong,NodeId,Node,IpAddr,Port,Mode}<-PingR],
     ActiveNodes.
 
@@ -155,7 +164,7 @@ check_available_nodes(NodesInfo)->
 %% --------------------------------------------------------------------
 check_missing_nodes(NodesInfo)->
 %    {ok,NodesInfo}=file:consult(?NODE_CONFIG),
-    PingR=[{tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]}),NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo],
+    PingR=[{tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]},?CLIENT_TIMEOUT),NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo],
     ActiveNodes=[{NodeId,Node,IpAddr,Port,Mode}||{pong,NodeId,Node,IpAddr,Port,Mode}<-PingR],
     Missing=[{DesiredNodeId,DesiredNode,DesiredIpAddr,DesiredPort,DesiredMode}||
 		{DesiredNodeId,DesiredNode,DesiredIpAddr,DesiredPort,DesiredMode}<-NodesInfo,
@@ -172,7 +181,7 @@ check_obsolite_services(DesiredServices)->
   
 %{"dns_service","localhost",40000,pod_master@asus,1584047881}
     RegisteredServices=dns_service:all(),
-    PingR=[{tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]}),IpAddr,Port}||{ServiceId,IpAddr,Port,_,_}<-RegisteredServices],
+    PingR=[{tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]},?CLIENT_TIMEOUT),IpAddr,Port}||{ServiceId,IpAddr,Port}<-RegisteredServices],
     ActiveServices=[{atom_to_list(ServiceId),IpAddr,Port}||{{pong,_,ServiceId},IpAddr,Port}<-PingR],
     Obsolite=[{ObsoliteServiceId,ObsoliteIpAddr,ObsolitePort}||{ObsoliteServiceId,ObsoliteIpAddr,ObsolitePort}<-ActiveServices,
 							   false=:=lists:member({ObsoliteServiceId,ObsoliteIpAddr,ObsolitePort},DesiredServices)],
@@ -185,7 +194,7 @@ check_obsolite_services(DesiredServices)->
 %% Returns: non
 %% --------------------------------------------------------------------
 check_missing_services(DesiredServices)->
-    PingR=[{tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]}),IpAddr,Port}||{ServiceId,IpAddr,Port}<-DesiredServices],
+    PingR=[{tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]},?CLIENT_TIMEOUT),IpAddr,Port}||{ServiceId,IpAddr,Port}<-DesiredServices],
     ActiveServices=[{atom_to_list(ServiceId),IpAddr,Port}||{{pong,_,ServiceId},IpAddr,Port}<-PingR],
     Missing=[{DesiredServiceId,DesiredIpAddr,DesiredPort}||{DesiredServiceId,DesiredIpAddr,DesiredPort}<-DesiredServices,
 							   false=:=lists:member({DesiredServiceId,DesiredIpAddr,DesiredPort},ActiveServices)],
@@ -312,7 +321,7 @@ create_service_list([{ServiceId,_Num,Nodes}|T],NodesInfo,Acc) ->
 extract_ipaddr(ServiceId,NodeId,NodesInfo)->
     case lists:keyfind(NodeId,1,NodesInfo) of
 	false->
-	    {ServiceId,glurk,ServiceId};
+	    {ServiceId,false,false};
 	{_NodeId,_Node,IpAddr,Port,_Mode}->
 	    {ServiceId,IpAddr,Port}	
     end.				     
@@ -333,7 +342,7 @@ extract_ipaddr(ServiceId,NodeId,NodesInfo)->
 ping_service([],_,PingResult)->
     PingResult;
 ping_service([{_VmName,IpAddr,Port}|T],ServiceId,Acc)->
-    R=tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]}),
+    R=tcp_client:call({IpAddr,Port},{list_to_atom(ServiceId),ping,[]},?CLIENT_TIMEOUT),
  %   R={ServiceId,VmName,IpAddr,Port},
     ping_service(T,ServiceId,[R|Acc]).
  
