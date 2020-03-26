@@ -175,12 +175,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% --------------------------------------------------------------------
 h_beat(Interval)->
     case rpc:call(node(),orchistrater,campaign,[],60*1000) of
-	{badrpc,Err}->
-	    lib_service:log_event(?MODULE,?LINE,orchistrater,campaign,error,[{badrpc,Err}]);
-	_->
-	    ok
+	ok->
+	    ok;
+	Err->
+	    lib_service:log_event(?MODULE,?LINE,orchistrater,campaign,error,[Err])
     end,
-    
     timer:sleep(Interval),
     rpc:cast(node(),?MODULE,heart_beat,[Interval]).
 

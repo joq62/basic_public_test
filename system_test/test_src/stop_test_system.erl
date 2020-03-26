@@ -37,10 +37,10 @@
 %% --------------------------------------------------------------------
 
 start()->
-    {ok,NodesInfo}=file:consult(?NODE_CONFIG),
 
-    WorkerList=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo,
-						NodeId=/="pod_master"],
+    {ok,NodeList}=file:consult(?NODE_CONFIG),
+    W1=lists:keydelete("pod_master",1,NodeList),
+    WorkerList=lists:keydelete("pod_40010",1,W1),
     [rpc:call(Node,init,stop,[])||{_NodeId,Node,_IpAddr,_Port,_Mode}<-WorkerList],
     [os:cmd("rm -r "++NodeId)||{NodeId,_Node,_IpAddr,_Port,_Mode}<-WorkerList],
   

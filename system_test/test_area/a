@@ -1,0 +1,29 @@
+{lib_master,63,update_configs}
+=ERROR REPORT==== 26-Mar-2020::14:47:13.842242 ===
+Error in process <0.27235.0> on node pod_master@asus with exit value:
+{undef,
+    [{lib_service,log_event,
+         [master_service,179,orchistrater,campaign,error,
+          [{badrpc,
+               {'EXIT',
+                   {function_clause,
+                       [{orchistrater,'-campaign/0-lc$^0/1-0-',
+                            [{error,
+                                 [timeout,"joqhome.dynamic-dns.net",40000,
+                                  tcp_client,81]}],
+                            [{file,"master_service/src/orchistrater.erl"},
+                             {line,67}]},
+                        {orchistrater,campaign,0,
+                            [{file,"master_service/src/orchistrater.erl"},
+                             {line,67}]},
+                        {rpc,'-handle_call_call/6-fun-0-',5,
+                            [{file,"rpc.erl"},{line,197}]}]}}}]],
+         []},
+     {master_service,h_beat,1, 
+         [{file,"master_service/src/master_service.erl"},{line,179}]}]}
+
+
+[{"joqhome.dynamic-dns.net",40010}]
+(pod_master@asus)7> dns_service:get("divi_service").
+[{"joqhome.dynamic-dns.net",40010}]
+(pod_master@asus)8> master_service:nodes().         

@@ -31,7 +31,9 @@
 %% --------------------------------------------------------------------
 start()->
     clean_start(),
+    stop_test_system:start(),
     start_services:start(),
+    start_test_system:start(),
 %    pod_master:start(),
   %  spawn(application_test:start() end),
  %   spawn(monkey_test:start() end),

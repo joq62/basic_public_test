@@ -37,8 +37,6 @@
 %% --------------------------------------------------------------------
 start()->
     start_nodes(),
-    ok=application:start(master_service),
-    dns_service:add("master_service","localhost",40000),
     timer:sleep(10*1000),
     check_nodes(),
     ok.
@@ -68,31 +66,23 @@ check_nodes()->
 %% Returns: non
 %% -------------------------------------------------------------------
 start_nodes()->
-    %% Start lib_service and tcp_server for pod_master 
-    ok=application:start(dns_service),    
-    dns_service:add("dns_service","localhost",40000),
-    ok=application:start(log_service),    
-    dns_service:add("log_service","localhost",40000),
-
-    ok=application:start(lib_service),    
-    lib_service:start_tcp_server("localhost",40000,parallell), 
-    D=date(),
-    ?assertEqual(D,tcp_client:call({"localhost",40000},{erlang,date,[]})),
     %% Create worker pods 
     {ok,NodeList}=file:consult(?NODE_CONFIG),
-    WorkerList=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodeList,
-						NodeId=/="pod_master"],
-    IpInfoComputer={"localhost",40000},
+%    WorkerList=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodeList,
+%						NodeId=/="pod_master"],
+    W1=lists:keydelete("pod_master",1,NodeList),
+    WorkerList=lists:keydelete("pod_40010",1,W1),
+    IpInfoComputer={"joqhome.dynamic-dns.net",40000},
     NeededServices=[{{service,"lib_service"},{git,"https://github.com/joq62/basic.git"}}],
   
 %  ?assertMatch([ok,ok,ok],[lib_master:start_pod(IpInfoComputer,NodeComputer,
 %						  {Node,NodeId,IpAddrPod,PortPod,ModePod},
 %						  NeededServices)
 %		 ||{NodeId,Node,IpAddrPod,PortPod,ModePod}<-WorkerList]),
-    ?assertMatch([ok,ok,ok],[tcp_client:call(IpInfoComputer,{lib_master,start_pod,
-							     [{"localhost",40000},
+    ?assertMatch([ok,ok,ok,ok,ok,ok],[tcp_client:call(IpInfoComputer,{lib_master,start_pod,
+							     [{"joqhome.dynamic-dns.net",40000},
 							      {NodeId,IpAddrPod,PortPod,ModePod},
-							      NeededServices]})
+							      NeededServices]},?CLIENT_TIMEOUT)
 		     ||{NodeId,_Node,IpAddrPod,PortPod,ModePod}<-WorkerList]),
     ok.
 

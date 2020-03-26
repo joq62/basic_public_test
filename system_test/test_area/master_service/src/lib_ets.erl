@@ -78,7 +78,7 @@ delete(Key)->
 all(Key)->
     case ets:match(?MASTER_ETS,{Key,'$1'}) of
 	[]->
-	    no_entry;
+	    [];
 	Info ->
 	    [[Value]]=Info,
 	    Value

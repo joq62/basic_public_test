@@ -63,19 +63,19 @@ campaign()->
    
     %% 2).
     DesiredServices=lib_ets:all(desired_services),
-    RegisteredServices=tcp_client:call(?DNS_ADDRESS,{dns_service,all,[]},?CLIENT_TIMEOUT),
-    RemoveDns=[{ServiceId,IpAddr,Port}||{ServiceId,IpAddr,Port,_,_}<-RegisteredServices,
-	      false==lists:member({ServiceId,IpAddr,Port},DesiredServices)],
-    [tcp_client:call(?DNS_ADDRESS,{dns_service,delete,[ServiceId,IpAddr,Port]},?CLIENT_TIMEOUT)
-     ||{ServiceId,IpAddr,Port}<-RemoveDns],
-
-    %% 3).
-    
-    
-    lib_master:remove_obsolite(),
-
-    lib_master:start_missing(),
-    ok.
+    case tcp_client:call(?DNS_ADDRESS,{dns_service,all,[]},?CLIENT_TIMEOUT) of
+	{error,Err}->
+	    {error,Err};
+	RegisteredServices->	
+	    RemoveDns=[{ServiceId,IpAddr,Port}||{ServiceId,IpAddr,Port,_,_}<-RegisteredServices,
+						false==lists:member({ServiceId,IpAddr,Port},DesiredServices)],
+	    [tcp_client:call(?DNS_ADDRESS,{dns_service,delete,[ServiceId,IpAddr,Port]},?CLIENT_TIMEOUT)
+	     ||{ServiceId,IpAddr,Port}<-RemoveDns],
+	    %% 3).
+	    lib_master:remove_obsolite(),
+	    lib_master:start_missing(),
+	    ok
+    end.
 
 
 

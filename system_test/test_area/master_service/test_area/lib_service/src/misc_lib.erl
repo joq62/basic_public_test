@@ -56,6 +56,35 @@ log_event(Module,Line,Severity,Info)->
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
+pmap(F,L)->
+    S=self(),
+    Ref=erlang:make_ref(),
+    PidList=[spawn(fun()-> do_fn(S,Ref,F,I) end)||I<-L],
+    N=length(PidList),
+    gather(N,Ref,[]).
+
+
+do_fn(Parent,Ref,F,I)->
+    Parent!{Ref,catch(F(I))}.
+
+gather(0,_,Result)->
+    Result;
+gather(N,Ref,Acc) ->
+    receive
+	{Ref,Ret}->
+	    gather(N-1,Ref,[Ret|Acc])
+    end.
+			     
+
+
+
+
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
 
 unconsult(File, L) ->
     {ok, S} = file:open(File, write),

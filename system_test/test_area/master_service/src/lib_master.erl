@@ -153,9 +153,24 @@ remove([{ServiceId,IpAddr,Port}|T],Acc)->
 %% --------------------------------------------------------------------
 check_available_nodes(NodesInfo)->
    % {ok,NodesInfo}=file:consult(?NODE_CONFIG),    
-    PingR=[{tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]},?CLIENT_TIMEOUT),NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo],
+    S=self(),Ref=erlang:make_ref(),
+    PidList=[spawn(fun()-> p_check_available_nodes(S,Ref,I) end)||I<-NodesInfo],
+    N=length(PidList),
+    PingR=gather(N,Ref,[]),
     ActiveNodes=[{NodeId,Node,IpAddr,Port,Mode}||{pong,NodeId,Node,IpAddr,Port,Mode}<-PingR],
     ActiveNodes.
+
+p_check_available_nodes(Parent,Ref,{NodeId,Node,IpAddr,Port,Mode})->
+    Ret=tcp_client:call({IpAddr,Port},{net_adm,ping,[Node]},?CLIENT_TIMEOUT),
+    Parent!{Ref,{Ret,NodeId,Node,IpAddr,Port,Mode}}.
+
+gather(0,_,Result)->
+    Result;
+gather(N,Ref,Acc) ->
+    receive
+	{Ref,Ret}->
+	    gather(N-1,Ref,[Ret|Acc])
+    end.
 
 %% --------------------------------------------------------------------
 %% Function: 
@@ -299,19 +314,29 @@ create_service_list(AppsInfo,NodesInfo)->
 create_service_list([],_,ServiceList)->
     ServiceList;
 
-create_service_list([{ServiceId,_Num,[]}|T],NodesInfo,Acc)->
-
+create_service_list([{ServiceId,Num,[]}|T],NodesInfo,Acc)->
+    
     %% GLURK smarter alogrithm 
-    L=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-NodesInfo,
+    AvailableNodes=lib_ets:all(nodes),
+    L=[{NodeId,Node,IpAddr,Port,Mode}||{NodeId,Node,IpAddr,Port,Mode}<-AvailableNodes,
 				       NodeId=/=?MASTER_NODEID],
     NewAcc= case L of
 		[]->
 		    Acc;
 		L->
-		    [{_NodeId,_Node,IpAddr,Port,_Mode}|_]=L,
-		    [{ServiceId,IpAddr,Port}|Acc]
+		    %% Extract current desired services
+		    %% check if service already deployed on an existing node 
+		    %% check if can deploy total amount of services (different nodes)
+		    
+		    U1=[{ServiceId,IpAddr,Port}||{S1,IpAddr,Port}<-lib_ets:all(desired_services),
+							  ServiceId=:=S1],
+		    U2=keep_available_nodes(U1,L,[]),
+		    NumToUpdate=Num-length(U2),
+		    UpdatedList=update(NumToUpdate,L,ServiceId,U2),
+		    [UpdatedList|Acc]
 	    end,
     create_service_list(T,NodesInfo,NewAcc);
+
 
 create_service_list([{ServiceId,_Num,Nodes}|T],NodesInfo,Acc) ->
     L=[extract_ipaddr(ServiceId,NodeId,NodesInfo)||NodeId<-Nodes],
@@ -325,8 +350,45 @@ extract_ipaddr(ServiceId,NodeId,NodesInfo)->
 	{_NodeId,_Node,IpAddr,Port,_Mode}->
 	    {ServiceId,IpAddr,Port}	
     end.				     
+
+update(0,_AvailableNodes,_ServiceId,UpdatedList)->
+    UpdatedList;
+update(_,[],_,UpdatedList)->
+    UpdatedList;
+update(N,[{_NodeId,_Node,IpAddr,Port,_Mode}|T],ServiceId,Acc)->
+    NewAcc=case [{IpAddr,Port}||{_ServiceId,IpAddr2,Port2}<-Acc,
+				{IpAddr2,Port2}=:={IpAddr,Port}] of
+	       []->
+		   NewN=N-1,
+		   [{ServiceId,IpAddr,Port}|Acc];
+	       _->
+		   NewN=N,
+		   Acc
+	   end,
+    update(NewN,T,ServiceId,NewAcc).
     
 
+
+keep_available_nodes([],_,ServiceList)->
+    ServiceList;
+keep_available_nodes([{ServiceId,IpAddr,Port}|T],AvailableNodes,Acc) ->
+    L=[{ServiceId,IpAddr,Port}||{_NodeId,_Node,IpAddr2,Port2,_Mode}<-AvailableNodes,
+			      {IpAddr,Port}=:={IpAddr2,Port2}],
+    NewAcc=lists:append(L,Acc),
+    keep_available_nodes(T,AvailableNodes,NewAcc).    
+
+
+
+get_ip_port({ServiceId,IpAddr,Port}, AvailableNodes)->
+    L=[{IpAddr,Port}||{_NodeId,_Node,Ip1,P1,_Mode}<-AvailableNodes,
+		      {Ip1,P1}=:={IpAddr,Port}],
+    case L of
+	[]->
+	    [{_NodeId,_Node,Ip2,P2,_Mode}|_]=AvailableNodes,
+	    {ServiceId,Ip2,P2};
+	_ ->
+	    {ServiceId,IpAddr,Port}
+    end.
 %App_list=[{service_id,ip_addr,port,status}], status=running|not_present|not_loaded
 %app_info=[{service_id,num,nodes,source}],  
 % nodes=[{ip_addr,port}]|[], num = integer. Can be mix of spefied and unspecified nodes. Ex: num=2, nodes=[{ip_addr_1,port_2}] -> one psecifed and one unspecified

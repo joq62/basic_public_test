@@ -1,81 +1,30 @@
-{syslog_info,{2020,3,23},
-             {23,11,49},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,10,57},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,10,4},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,9,11},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,9,11},
-             na,na,pod_master@asus,lib_master,125,info,
-             ["Obsolite services ",
-              [{"divi_service","joqhome.dynamic-dns.net",40000}]]}.
-{syslog_info,{2020,3,23},
-             {23,8,18},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,7,25},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,6,32},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,5,40},
+{syslog_info,{2020,3,26},
+             {23,8,55},
              na,na,pod_master@asus,service_handler,55,info,
-             ["ok Started ","divi_service","joqhome.dynamic-dns.net",40000]}.
-{syslog_info,{2020,3,23},
-             {23,5,35},
+             ["ok Started ","divi_service","joqhome.dynamic-dns.net",40003]}.
+{syslog_info,{2020,3,26},
+             {23,8,51},
+             na,na,pod_master@asus,service_handler,55,info,
+             ["ok Started ","adder_service","joqhome.dynamic-dns.net",40002]}.
+{syslog_info,{2020,3,26},
+             {23,8,47},
+             na,na,pod_master@asus,service_handler,55,info,
+             ["ok Started ","adder_service","joqhome.dynamic-dns.net",40001]}.
+{syslog_info,{2020,3,26},
+             {23,8,44},
+             na,na,pod_master@asus,lib_master,92,info,
+             ["Missing services",
+              [{"adder_service","joqhome.dynamic-dns.net",40001},
+               {"adder_service","joqhome.dynamic-dns.net",40002},
+               {"divi_service","joqhome.dynamic-dns.net",40003}]]}.
+{syslog_info,{2020,3,26},
+             {23,8,3},
              na,na,pod_master@asus,lib_master,92,info,
              ["Missing services",
               [{"adder_service",false,false},
                {"adder_service",false,false},
-               {"divi_service","joqhome.dynamic-dns.net",40000}]]}.
-{syslog_info,{2020,3,23},
-             {23,4,43},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,4,42},
-             na,na,pod_master@asus,lib_master,125,info,
-             ["Obsolite services ",
-              [{"divi_service","joqhome.dynamic-dns.net",40000}]]}.
-{syslog_info,{2020,3,23},
-             {23,3,50},
-             na,na,pod_master@asus,service_handler,55,info,
-             ["ok Started ","divi_service","joqhome.dynamic-dns.net",40000]}.
-{syslog_info,{2020,3,23},
-             {23,3,45},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},
-               {"adder_service",false,false},
-               {"divi_service","joqhome.dynamic-dns.net",40000}]]}.
-{syslog_info,{2020,3,23},
-             {23,2,53},
-             na,na,pod_master@asus,lib_master,92,info,
-             ["Missing services",
-              [{"adder_service",false,false},{"adder_service",false,false}]]}.
-{syslog_info,{2020,3,23},
-             {23,2,40},
+               {"divi_service",false,false}]]}.
+{syslog_info,{2020,3,26},
+             {23,8,2},
              na,na,pod_master@asus,master_service,94,info,
              ["master_service started"]}.
